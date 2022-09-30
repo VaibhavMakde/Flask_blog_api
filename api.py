@@ -46,16 +46,18 @@ def token_required(f):
         token = None
         print(request.headers)
 
-        if 'x-access-token' in request.headers:
+        if 'X-Access-Token' in request.headers:
             token = request.headers['x-access-token']
+            print('token :', token)
 
         if not token:
             return jsonify({'message': 'Token is missing!'}), 401
 
-        # if token is present
         try:
-            data = jwt.decode(token, app.config['SECRET_KEY'])
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            print("data:", data)
             current_user = User.query.filter_by(public_id=data['public_id']).first()
+            print("current_user", current_user.username)
         except:
             return jsonify({'message': 'Token is invalid!'}), 401
 
@@ -68,9 +70,9 @@ def token_required(f):
 @token_required
 def get_all_users(current_user):
     print("all users")
-    print("current :",current_user)
+    print("current  :", current_user)
     if not current_user.admin:
-        return jsonify({'message': 'Cannot perform that function!'})
+        return jsonify({'message': 'User is Not Admin !! Cannot perform that function!'})
 
     users = User.query.all()
     print(users)
@@ -90,9 +92,9 @@ def get_all_users(current_user):
 
 @app.route('/user/<public_id>', methods=['GET'])
 @token_required
-def get_one_user(current_user,public_id):
+def get_one_user(current_user, public_id):
     if not current_user.admin:
-        return jsonify({'message' : 'Cannot perform that function!'})
+        return jsonify({'message': 'Cannot perform that function!'})
 
     user = User.query.filter_by(public_id=public_id).first()
 
@@ -112,7 +114,7 @@ def get_one_user(current_user,public_id):
 @token_required
 def create_user(current_user):
     if not current_user.admin:
-        return jsonify({'message' : 'Cannot perform that function!'})
+        return jsonify({'message': 'User is Not Admin !! Cannot perform that function!'})
 
     data = request.get_json()
     print(data)
@@ -127,10 +129,10 @@ def create_user(current_user):
 
 
 @app.route('/user/<public_id>', methods=['PUT'])
-# @token_required
-def promote_user(public_id):
-    # if not current_user.admin:
-    #     return jsonify({'message' : 'Cannot perform that function!'})
+@token_required
+def promote_user(current_user, public_id):
+    if not current_user.admin:
+        return jsonify({'message': 'User is Not Admin !! Cannot perform that function!'})
 
     user = User.query.filter_by(public_id=public_id).first()
 
@@ -144,11 +146,10 @@ def promote_user(public_id):
 
 
 @app.route('/user/<public_id>', methods=['DELETE'])
-# @token_required
-def delete_user(public_id):
-# def delete_user(current_user,public_id):
-#     if not current_user.admin:
-#         return jsonify({'message' : 'Cannot perform that function!'})
+@token_required
+def delete_user(current_user, public_id):
+    if not current_user.admin:
+        return jsonify({'message': 'User is Not Admin !! Cannot perform that function!'})
 
     user = User.query.filter_by(public_id=public_id).first()
 
@@ -175,12 +176,77 @@ def login():
 
     if check_password_hash(user.password, auth.password):
         token = jwt.encode(
-            {'public_id': user.public_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)},
+            {'public_id': user.public_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=60)},
             app.config['SECRET_KEY'])
 
         return jsonify({'token': token})
 
     return make_response('Could not verify', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
+
+
+@app.route('/blog', methods=['GET'])
+@token_required
+def get_all_blog(current_user):
+    blogs = Blog.query.filter_by(author=current_user.username).all()
+    print(blogs)
+
+    output = []
+
+    for blog in blogs:
+        blog_data = {}
+
+        blog_data['id'] = blog.id
+        blog_data['title'] = blog.title
+        blog_data['blog'] = blog.blog
+        blog_data['author'] = blog.author
+        output.append(blog_data)
+
+    return jsonify({'Blogs': output})
+
+
+@app.route('/blog/<blog_id>', methods=['GET'])
+@token_required
+def get_one_todo(current_user, blog_id):
+    blog = Blog.query.filter_by(id=blog_id, author=current_user.username).first()
+
+    if not blog:
+        return jsonify({'message': 'No Blog found!'})
+
+    blog_data = {}
+    blog_data['id'] = blog.id
+    blog_data['title'] = blog.title
+    blog_data['blog'] = blog.blog
+    blog_data['author'] = blog.author
+
+    return jsonify(blog_data)
+
+
+@app.route('/blog', methods=['POST'])
+@token_required
+def create_blog(current_user):
+    data = request.get_json()
+    print(data)
+
+    new_blog = Blog(title=data['title'], blog=data['blog'], author=current_user.username)
+    print(new_blog)
+    db.session.add(new_blog)
+    db.session.commit()
+
+    return jsonify({'message': "Blog created!"})
+
+
+@app.route('/blog/<blog_id>', methods=['DELETE'])
+@token_required
+def delete_todo(current_user, blog_id):
+    blog = Blog.query.filter_by(id=blog_id, author=current_user.username).first()
+
+    if not blog:
+        return jsonify({'message': 'No Blog found!'})
+
+    db.session.delete(blog)
+    db.session.commit()
+
+    return jsonify({'message': 'BLog item deleted!'})
 
 
 if __name__ == '__main__':
