@@ -237,7 +237,7 @@ def create_blog(current_user):
 
 @app.route('/blog/<blog_id>', methods=['DELETE'])
 @token_required
-def delete_todo(current_user, blog_id):
+def delete_blog(current_user, blog_id):
     blog = Blog.query.filter_by(id=blog_id, author=current_user.username).first()
 
     if not blog:
