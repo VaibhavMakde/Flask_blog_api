@@ -7,6 +7,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import jwt
 
+T = {}
+
 app = Flask(__name__)
 
 app.config['SECRET_KEY'] = 'thisissecret'
@@ -23,14 +25,6 @@ class User(db.Model):
     admin = db.Column(db.Boolean)
 
 
-class Blog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100))
-    blog = db.Column(db.String(500))
-    author = db.Column(db.Integer, db.ForeignKey(
-        'user.id', ondelete="CASCADE"), nullable=False)
-
-
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.String(200), nullable=False)
@@ -38,6 +32,16 @@ class Comment(db.Model):
         'user.id', ondelete="CASCADE"), nullable=False)
     post_id = db.Column(db.Integer, db.ForeignKey(
         'blog.id', ondelete="CASCADE"), nullable=False)
+
+
+class Blog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100))
+    blog = db.Column(db.String(500))
+    # comments = db.Column(db.Integer, db.ForeignKey(
+    #     'comment.id', ondelete="CASCADE"))
+    author = db.Column(db.Integer, db.ForeignKey(
+        'user.id', ondelete="CASCADE"), nullable=False)
 
 
 def token_required(f):
@@ -206,7 +210,7 @@ def get_all_blog(current_user):
 
 @app.route('/blog/<blog_id>', methods=['GET'])
 @token_required
-def get_one_todo(current_user, blog_id):
+def get_one_blog(current_user, blog_id):
     blog = Blog.query.filter_by(id=blog_id, author=current_user.username).first()
 
     if not blog:
@@ -237,7 +241,7 @@ def create_blog(current_user):
 
 @app.route('/blog/<blog_id>', methods=['DELETE'])
 @token_required
-def delete_todo(current_user, blog_id):
+def delete_blog(current_user, blog_id):
     blog = Blog.query.filter_by(id=blog_id, author=current_user.username).first()
 
     if not blog:
