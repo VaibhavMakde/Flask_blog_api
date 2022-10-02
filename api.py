@@ -253,5 +253,79 @@ def delete_blog(current_user, blog_id):
     return jsonify({'message': 'BLog item deleted!'})
 
 
+@app.route('/blog/<blog_id>/comment', methods=['GET'])
+@token_required
+def get_all_comment(current_user, blog_id):
+    comments = Comment.query.filter_by(post_id=blog_id).all()
+    blog_id = Blog.query.filter_by(id=blog_id).all()
+    print(blog_id)
+
+    for blog in blog_id:
+        blog_data = {}
+        blog_data['title'] = blog.title
+        blog_data['blog'] = blog.blog
+
+        print('blog:', blog_data)
+
+    output = []
+
+    for comment in comments:
+        comments_data = {}
+
+        comments_data['id'] = comment.id
+        comments_data['text'] = comment.text
+        comments_data['author'] = comment.author
+        for blog in blog_id:
+            blog_data = {}
+            blog_data['id'] = blog.id
+            blog_data['title'] = blog.title
+            blog_data['blog'] = blog.blog
+            comments_data['post_id'] = blog_data
+        output.append(comments_data)
+
+    return jsonify({'Blogs': output})
+
+
+@app.route('/blog/<blog_id>/comment/<comment_id>', methods=['GET'])
+@token_required
+def get_one_comment(current_user, blog_id, comment_id):
+    comment = Comment.query.filter_by(id=comment_id).first()
+
+    if not comment:
+        return jsonify({'message': 'No comment found!'})
+
+    comment_data = {}
+    comment_data['id'] = comment.id
+    comment_data['text'] = comment.text
+    comment_data['author'] = comment.author
+
+    return jsonify(comment_data)
+
+
+@app.route('/blog/<blog_id>/comment', methods=['POST'])
+@token_required
+def create_comment(current_user, blog_id):
+    data = request.get_json()
+    new_comment = Comment(text=data['text'], author=current_user.username, post_id=blog_id)
+    db.session.add(new_comment)
+    db.session.commit()
+
+    return jsonify({'message': "Commented on Blog!"})
+
+
+@app.route('/blog/<blog_id>/comment/<comment_id>', methods=['DELETE'])
+@token_required
+def delete_comment(current_user, blog_id, comment_id):
+    comment = Comment.query.filter_by(id=comment_id).first()
+
+    if not comment:
+        return jsonify({'message': 'No Comment found!'})
+
+    db.session.delete(comment)
+    db.session.commit()
+
+    return jsonify({'message': 'Comment  deleted!'})
+
+
 if __name__ == '__main__':
     app.run(debug=True)
