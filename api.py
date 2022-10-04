@@ -1,20 +1,24 @@
 import datetime
 from functools import wraps
-
+from flask_marshmallow import Marshmallow, fields
 from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import jwt
+from flask_migrate import Migrate
 
-T = {}
+
 
 app = Flask(__name__)
 
 app.config['SECRET_KEY'] = 'thisissecret'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://///home/vaibhav/PycharmProjects/blog3-api-flask/blog.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://////home/vaibhav/PycharmProjects/blog3-api-flask (copy)/blog.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+ma = Marshmallow(app)
+migrate = Migrate(app, db)
 
 
 class User(db.Model):
@@ -23,6 +27,7 @@ class User(db.Model):
     username = db.Column(db.String(50))
     password = db.Column(db.String(80))
     admin = db.Column(db.Boolean)
+    blogs = db.relationship('Blog', backref='user')
 
 
 class Comment(db.Model):
@@ -35,13 +40,43 @@ class Comment(db.Model):
 
 
 class Blog(db.Model):
+    # __searchable__ == ['title','blog','author']
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100))
     blog = db.Column(db.String(500))
-    # comments = db.Column(db.Integer, db.ForeignKey(
-    #     'comment.id', ondelete="CASCADE"))
     author = db.Column(db.Integer, db.ForeignKey(
         'user.id', ondelete="CASCADE"), nullable=False)
+    comments = db.relationship('Comment', backref='blog')
+
+
+class CommentSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Comment
+        load_instance = True
+        include_relationships = True
+        fields = ('id', 'text', 'author', 'post_id')
+        # include_fk = True
+
+
+class BlogSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Blog
+        load_instance = True
+        include_relationships = True
+
+        fields = ('id', 'title', 'blog', 'author', 'comments')
+
+    comments = ma.Nested(CommentSchema, many=True)
+
+
+class UserSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = User
+        load_instance = True
+        include_relationships = True
+        fields = ('id', 'public_id', 'username', 'password', 'admin', 'blogs')
+
+    blogs = ma.Nested(BlogSchema, many=True)
 
 
 def token_required(f):
@@ -79,17 +114,10 @@ def get_all_users(current_user):
         return jsonify({'message': 'User is Not Admin !! Cannot perform that function!'})
 
     users = User.query.all()
-    print(users)
 
-    output = []
-
-    for user in users:
-        user_data = {}
-        user_data['public_id'] = user.public_id
-        user_data['username'] = user.username
-        user_data['password'] = user.password
-        user_data['admin'] = user.admin
-        output.append(user_data)
+    # marshmallow serialization on user
+    user_schema = UserSchema(many=True)
+    output = user_schema.dump(users)
 
     return jsonify({'users': output})
 
@@ -105,13 +133,17 @@ def get_one_user(current_user, public_id):
     if not user:
         return jsonify({'message': 'No user found!'})
 
-    user_data = {}
-    user_data['public_id'] = user.public_id
-    user_data['username'] = user.username
-    user_data['password'] = user.password
-    user_data['admin'] = user.admin
+    # user_data = {}
+    # user_data['public_id'] = user.public_id
+    # user_data['username'] = user.username
+    # user_data['password'] = user.password
+    # user_data['admin'] = user.admin
 
-    return jsonify({'user': user_data})
+    userSchema = UserSchema()
+    output = userSchema.dump(user)
+    print(output)
+
+    return jsonify({'user': output})
 
 
 @app.route('/user', methods=['POST'])
@@ -192,18 +224,10 @@ def login():
 @token_required
 def get_all_blog(current_user):
     blogs = Blog.query.filter_by(author=current_user.username).all()
-    print(blogs)
 
-    output = []
-
-    for blog in blogs:
-        blog_data = {}
-
-        blog_data['id'] = blog.id
-        blog_data['title'] = blog.title
-        blog_data['blog'] = blog.blog
-        blog_data['author'] = blog.author
-        output.append(blog_data)
+    # Blog serialization using marshmallow
+    blog_schema = BlogSchema(many=True)
+    output = blog_schema.dump(blogs)
 
     return jsonify({'Blogs': output})
 
@@ -212,17 +236,51 @@ def get_all_blog(current_user):
 @token_required
 def get_one_blog(current_user, blog_id):
     blog = Blog.query.filter_by(id=blog_id, author=current_user.username).first()
+    print(blog.author)
+    if not blog:
+        return jsonify({'message': 'No Blog found!'})
+
+    # Blog serialization using marshmallow
+    blog_schema = BlogSchema()
+    output = blog_schema.dump(blog)
+
+    return jsonify(output)
+
+
+@app.route('/blog/search', methods=['POST'])
+@token_required
+def search(current_user):
+    data = request.get_json()
+
+    try:
+        if data['title']:
+            search_by_title = data['title']
+            blog = Blog.query.filter_by(title=search_by_title).first()
+    except:
+        pass
+
+    try:
+        if data['author']:
+            search_by_author = data['author']
+            blog = Blog.query.filter_by(author=search_by_author).first()
+    except:
+        pass
+
+    try:
+        if data['blog']:
+            search_by_blog = data['blog']
+            blog = Blog.query.filter_by(blog=search_by_blog).first()
+    except:
+        pass
 
     if not blog:
         return jsonify({'message': 'No Blog found!'})
 
-    blog_data = {}
-    blog_data['id'] = blog.id
-    blog_data['title'] = blog.title
-    blog_data['blog'] = blog.blog
-    blog_data['author'] = blog.author
+    # Blog serialization using marshmallow
+    blog_schema = BlogSchema()
+    output = blog_schema.dump(blog)
 
-    return jsonify(blog_data)
+    return jsonify(output)
 
 
 @app.route('/blog', methods=['POST'])
@@ -257,47 +315,61 @@ def delete_blog(current_user, blog_id):
 @token_required
 def get_all_comment(current_user, blog_id):
     comments = Comment.query.filter_by(post_id=blog_id).all()
-    blog_id = Blog.query.filter_by(id=blog_id).all()
-    print(blog_id)
+    blog_id = Blog.query.filter_by(id=blog_id).first()
 
-    for blog in blog_id:
-        blog_data = {}
-        blog_data['title'] = blog.title
-        blog_data['blog'] = blog.blog
+    comment_schema = CommentSchema(many=True)
+    comment_data = comment_schema.dump(comments)
+    # blog_schema = BlogSchema()
+    # blog_data = blog_schema.dump(blog_id)
+    #
+    # comment_data.insert(0,blog_data)
+    print(comment_data)
 
-        print('blog:', blog_data)
+    # for blog in blog_id:
+    #     blog_data = {}
+    #     blog_data['title'] = blog.title
+    #     blog_data['blog'] = blog.blog
+    #
+    #     print('blog:', blog_data)
+    #
+    # output = []
 
-    output = []
+    # for comment in comments:
+    #     comments_data = {}
+    #
+    #     comments_data['id'] = comment.id
+    #     comments_data['text'] = comment.text
+    #     comments_data['author'] = comment.author
+    #     for blog in blog_id:
+    #         blog_data = {}
+    #         blog_data['id'] = blog.id
+    #         blog_data['title'] = blog.title
+    #         blog_data['blog'] = blog.blog
+    #         comments_data['post_id'] = blog_data
+    #     output.append(comments_data)
 
-    for comment in comments:
-        comments_data = {}
-
-        comments_data['id'] = comment.id
-        comments_data['text'] = comment.text
-        comments_data['author'] = comment.author
-        for blog in blog_id:
-            blog_data = {}
-            blog_data['id'] = blog.id
-            blog_data['title'] = blog.title
-            blog_data['blog'] = blog.blog
-            comments_data['post_id'] = blog_data
-        output.append(comments_data)
-
-    return jsonify({'Blogs': output})
+    return jsonify(comment_data)
 
 
 @app.route('/blog/<blog_id>/comment/<comment_id>', methods=['GET'])
 @token_required
 def get_one_comment(current_user, blog_id, comment_id):
     comment = Comment.query.filter_by(id=comment_id).first()
+    blog = Blog.query.filter_by(id=blog_id, author=current_user.username).first()
+
+    print(comment.post_id)
 
     if not comment:
         return jsonify({'message': 'No comment found!'})
 
-    comment_data = {}
-    comment_data['id'] = comment.id
-    comment_data['text'] = comment.text
-    comment_data['author'] = comment.author
+    comment_schema = CommentSchema()
+
+    comment_data = comment_schema.dump(comment)
+    blog_schema = BlogSchema()
+    blog_data = blog_schema.dump(blog)
+
+    comment_data['Blog'] = blog_data
+    print(type(comment_data))
 
     return jsonify(comment_data)
 
@@ -306,7 +378,9 @@ def get_one_comment(current_user, blog_id, comment_id):
 @token_required
 def create_comment(current_user, blog_id):
     data = request.get_json()
+
     new_comment = Comment(text=data['text'], author=current_user.username, post_id=blog_id)
+
     db.session.add(new_comment)
     db.session.commit()
 
@@ -323,6 +397,7 @@ def delete_comment(current_user, blog_id, comment_id):
 
     db.session.delete(comment)
     db.session.commit()
+    print(comment)
 
     return jsonify({'message': 'Comment  deleted!'})
 
