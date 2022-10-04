@@ -319,34 +319,7 @@ def get_all_comment(current_user, blog_id):
 
     comment_schema = CommentSchema(many=True)
     comment_data = comment_schema.dump(comments)
-    # blog_schema = BlogSchema()
-    # blog_data = blog_schema.dump(blog_id)
-    #
-    # comment_data.insert(0,blog_data)
-    print(comment_data)
 
-    # for blog in blog_id:
-    #     blog_data = {}
-    #     blog_data['title'] = blog.title
-    #     blog_data['blog'] = blog.blog
-    #
-    #     print('blog:', blog_data)
-    #
-    # output = []
-
-    # for comment in comments:
-    #     comments_data = {}
-    #
-    #     comments_data['id'] = comment.id
-    #     comments_data['text'] = comment.text
-    #     comments_data['author'] = comment.author
-    #     for blog in blog_id:
-    #         blog_data = {}
-    #         blog_data['id'] = blog.id
-    #         blog_data['title'] = blog.title
-    #         blog_data['blog'] = blog.blog
-    #         comments_data['post_id'] = blog_data
-    #     output.append(comments_data)
 
     return jsonify(comment_data)
 
